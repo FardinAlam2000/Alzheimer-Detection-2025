@@ -1,0 +1,47 @@
+
+import pandas as pd
+import numpy as np
+import os
+from imblearn.over_sampling import SMOTE
+
+# Define dataset path
+DATA_DIR = "alzheimers_disease_data.csv" 
+FILE_NAME = "alzheimers_disease_data.csv"
+SAVE_NAME = "alzheimers_disease_data_augmented.csv"
+
+# Load dataset
+df = pd.read_csv(os.path.join(DATA_DIR, FILE_NAME))
+
+# Display dataset info
+print("Original Dataset Shape:", df.shape)
+
+# Determine augmentation count (30% more data)
+num_samples = len(df)
+num_new_samples = int(num_samples * 0.3)
+
+# Select numerical columns for noise augmentation
+num_cols = df.select_dtypes(include=['float64', 'int64']).columns
+
+# Apply Gaussian Noise Augmentation
+def add_noise(data, noise_level=0.01):
+    return data + np.random.normal(0, noise_level * data.std(), data.shape)
+
+df_aug = df.copy()
+df_aug[num_cols] = add_noise(df[num_cols])
+
+# If classification, apply SMOTE (Optional)
+if "target" in df.columns:  # Assuming 'target' is the label column
+    smote = SMOTE(sampling_strategy=0.3, random_state=42)
+    X_resampled, y_resampled = smote.fit_resample(df.drop("target", axis=1), df["target"])
+    
+    df_aug_smote = pd.DataFrame(X_resampled, columns=df.drop("target", axis=1).columns)
+    df_aug_smote["target"] = y_resampled
+    
+    # Combine both augmentation methods
+    df_aug = pd.concat([df_aug, df_aug_smote.sample(num_new_samples, random_state=42)])
+
+# Save the augmented dataset
+df_aug.to_csv(os.path.join(DATA_DIR, SAVE_NAME), index=False)
+
+print("Augmented Dataset Shape:", df_aug.shape)
+print("Augmented dataset saved as:", SAVE_NAME)
