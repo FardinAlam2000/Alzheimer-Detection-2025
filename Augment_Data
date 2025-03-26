@@ -1,16 +1,19 @@
-
 import pandas as pd
 import numpy as np
-import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
 from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import train_test_split
+import os
 
-# Define dataset path
-DATA_DIR = "alzheimers_disease_data.csv" 
-FILE_NAME = "alzheimers_disease_data.csv"
+# Define dataset GitHub URL (Replace with your actual GitHub URL)
+GITHUB_REPO_URL = "https://raw.githubusercontent.com/your_user/your_repo/branch_name/path_to_file/alzheimers_disease_data.csv"
 SAVE_NAME = "alzheimers_disease_data_augmented.csv"
 
-# Load dataset
-df = pd.read_csv(os.path.join(DATA_DIR, FILE_NAME))
+# Load dataset from GitHub
+df = pd.read_csv(GITHUB_REPO_URL)
 
 # Display dataset info
 print("Original Dataset Shape:", df.shape)
@@ -41,7 +44,94 @@ if "target" in df.columns:  # Assuming 'target' is the label column
     df_aug = pd.concat([df_aug, df_aug_smote.sample(num_new_samples, random_state=42)])
 
 # Save the augmented dataset
-df_aug.to_csv(os.path.join(DATA_DIR, SAVE_NAME), index=False)
+df_aug.to_csv(SAVE_NAME, index=False)
 
 print("Augmented Dataset Shape:", df_aug.shape)
 print("Augmented dataset saved as:", SAVE_NAME)
+
+# Define PyTorch Dataset for the augmented data
+class AlzheimerDataset(Dataset):
+    def __init__(self, data, target_col):
+        self.data = torch.tensor(data.drop(columns=[target_col]).values, dtype=torch.float32)
+        self.targets = torch.tensor(data[target_col].values, dtype=torch.long)
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        return self.data[idx], self.targets[idx]
+
+# Split the dataset into training and testing sets
+train_data, test_data = train_test_split(df_aug, test_size=0.2, random_state=42)
+
+# Create DataLoader for training and testing
+train_dataset = AlzheimerDataset(train_data, target_col="target")
+test_dataset = AlzheimerDataset(test_data, target_col="target")
+
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+# Define a simple neural network model (for classification)
+class SimpleNN(nn.Module):
+    def __init__(self, input_size, hidden_size=64, output_size=2):
+        super(SimpleNN, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, output_size)
+        self.relu = nn.ReLU()
+        self.softmax = nn.Softmax(dim=1)
+    
+    def forward(self, x):
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        return self.softmax(x)
+
+# Initialize the model, loss function, and optimizer
+input_size = train_data.drop(columns=["target"]).shape[1]
+model = SimpleNN(input_size)
+
+criterion = nn.CrossEntropyLoss()  # For classification
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Training Loop
+num_epochs = 10
+for epoch in range(num_epochs):
+    model.train()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+    for inputs, targets in train_loader:
+        optimizer.zero_grad()
+        
+        # Forward pass
+        outputs = model(inputs)
+        
+        # Compute loss
+        loss = criterion(outputs, targets)
+        loss.backward()
+        optimizer.step()
+        
+        running_loss += loss.item()
+        
+        # Calculate accuracy
+        _, predicted = torch.max(outputs, 1)
+        total += targets.size(0)
+        correct += (predicted == targets).sum().item()
+    
+    epoch_loss = running_loss / len(train_loader)
+    epoch_acc = 100 * correct / total
+    print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.2f}%")
+
+# Evaluate the model on the test set
+model.eval()
+correct = 0
+total = 0
+with torch.no_grad():
+    for inputs, targets in test_loader:
+        outputs = model(inputs)
+        _, predicted = torch.max(outputs, 1)
+        total += targets.size(0)
+        correct += (predicted == targets).sum().item()
+
+test_acc = 100 * correct / total
+print(f"Test Accuracy: {test_acc:.2f}%")
+
