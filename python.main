@@ -9,8 +9,7 @@ from PIL import Image
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# Load the CSV file
-csv_file = "D:\\Alzheimer Dataset\\alzheimers_disease_data.csv"
+csv_file = "D:\\Alzheimer Dataset\\Augment_Data"
 df = pd.read_csv(csv_file)
 
 
